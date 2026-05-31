@@ -12,9 +12,9 @@ import {AUSD} from "./aUSD.sol";
 contract Minter is AccessControl, EIP712, Nonces {
     using SafeERC20 for IERC20;
 
-    bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
     bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
+    bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
 
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
