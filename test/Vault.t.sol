@@ -238,6 +238,40 @@ contract VaultTest is Test {
         console.log("Yield accrued with single sync", assetsAfterSingleSync - depositAmount);
     }
 
+    function testReturnToCustody() public {
+        usdt.mint(address(minter), 100e6);
+
+        bytes32 operatorRole = minter.OPERATOR_ROLE();
+        vm.prank(owner);
+        minter.grantRole(operatorRole, owner);
+
+        vm.prank(owner);
+        minter.returnToCustody(custody, 100e6);
+
+        assertEq(usdt.balanceOf(custody), 100e6);
+        assertEq(usdt.balanceOf(address(minter)), 0);
+    }
+
+    function testReturnToCustodyRevertsIfUnauthorized() public {
+        usdt.mint(address(minter), 100e6);
+
+        vm.prank(user);
+        vm.expectRevert();
+        minter.returnToCustody(custody, 100e6);
+    }
+
+    function testReturnToCustodyRevertsIfTargetNotCustody() public {
+        usdt.mint(address(minter), 100e6);
+
+        bytes32 operatorRole = minter.OPERATOR_ROLE();
+        vm.prank(owner);
+        minter.grantRole(operatorRole, owner);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        minter.returnToCustody(user, 100e6);
+    }
+
     function _mintSignature(address account, uint256 assets, address custody_, uint256 deadline)
         internal
         view

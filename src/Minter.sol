@@ -15,6 +15,7 @@ contract Minter is AccessControl, EIP712, Nonces {
     bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
@@ -66,6 +67,11 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     function mintYield(uint256 assets) external onlyRole(VAULT_ROLE) {
         aUSD.mint(msg.sender, assets);
+    }
+
+    function returnToCustody(address custody, uint256 assets) external onlyRole(OPERATOR_ROLE) {
+        _checkRole(CUSTODY_ROLE, custody);
+        USDT.safeTransfer(custody, assets);
     }
 
     function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {
