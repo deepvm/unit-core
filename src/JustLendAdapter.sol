@@ -15,8 +15,8 @@ contract JustLendAdapter is AccessControl {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     error ZeroAddress();
-    error MintFailed();
-    error RedeemFailed();
+    error MintFailed(uint256 errorCode);
+    error RedeemFailed(uint256 errorCode);
 
     IERC20 public immutable usdt;
     ITRC20JToken public immutable jUSDT;
@@ -40,20 +40,23 @@ contract JustLendAdapter is AccessControl {
     }
 
     function deposit() external onlyRole(OPERATOR_ROLE) {
-        uint256 uBalance = usdt.balanceOf(address(this));
-        if (uBalance > 0) {
-            if (jUSDT.mint(uBalance) != 0) revert MintFailed();
-        }
+        uint256 balance = usdt.balanceOf(address(this));
+        uint256 err = jUSDT.mint(balance);
+        if (err != 0) revert MintFailed(err);
     }
 
     function withdraw(uint256 amount) external onlyRole(OPERATOR_ROLE) {
-        if (jUSDT.redeemUnderlying(amount) != 0) revert RedeemFailed();
-        usdt.safeTransfer(minter, amount);
+        uint256 err = jUSDT.redeemUnderlying(amount);
+        if (err != 0) revert RedeemFailed(err);
+        uint256 balance = usdt.balanceOf(address(this));
+        usdt.safeTransfer(minter, balance);
     }
 
     function withdrawTo(uint256 amount, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (jUSDT.redeemUnderlying(amount) != 0) revert RedeemFailed();
-        usdt.safeTransfer(to, amount);
+        uint256 err = jUSDT.redeemUnderlying(amount);
+        if (err != 0) revert RedeemFailed(err);
+        uint256 balance = usdt.balanceOf(address(this));
+        usdt.safeTransfer(to, balance);
     }
 
     function setMinter(address _minter) external onlyRole(DEFAULT_ADMIN_ROLE) {

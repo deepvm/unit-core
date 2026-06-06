@@ -14,6 +14,7 @@ contract Vault is ERC4626, AccessControl {
     uint256 public apy;
 
     error ZeroAddress();
+    error InvalidAPY();
 
     constructor(address admin_, IERC20 asset_, Minter minter_) ERC20("Staked aUSD", "saUSD") ERC4626(asset_) {
         if (admin_ == address(0) || address(minter_) == address(0)) {
@@ -25,7 +26,7 @@ contract Vault is ERC4626, AccessControl {
     }
 
     function setAPY(uint256 apy_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(apy_ <= BPS);
+        if (apy_ > BPS) revert InvalidAPY();
         _sync();
         apy = apy_;
     }

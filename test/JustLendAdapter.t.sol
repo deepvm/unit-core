@@ -149,12 +149,6 @@ contract JustLendAdapterTest is Test {
         adapter.withdraw(400e6);
     }
 
-    function testDepositZeroBalanceDoesNotCallMint() public {
-        jUSDT.setMintReturnValue(1);
-        vm.prank(operator);
-        adapter.deposit();
-    }
-
     function testConstructorZeroMinterReverts() public {
         vm.expectRevert();
         new JustLendAdapter(admin, operator, address(0), address(usdt), address(jUSDT));
@@ -181,5 +175,28 @@ contract JustLendAdapterTest is Test {
         vm.prank(admin);
         vm.expectRevert();
         adapter.setMinter(address(0));
+    }
+
+    function testWithdrawToSuccess() public {
+        usdt.mint(address(adapter), 1000e6);
+        vm.prank(operator);
+        adapter.deposit();
+
+        vm.prank(admin);
+        adapter.withdrawTo(400e6, user);
+
+        assertEq(usdt.balanceOf(user), 400e6);
+        assertEq(usdt.balanceOf(address(jUSDT)), 600e6);
+        assertEq(jUSDT.balanceOf(address(adapter)), 600e6);
+    }
+
+    function testWithdrawToRevertsIfNotAdmin() public {
+        usdt.mint(address(adapter), 1000e6);
+        vm.prank(operator);
+        adapter.deposit();
+
+        vm.prank(user);
+        vm.expectRevert();
+        adapter.withdrawTo(400e6, user);
     }
 }
