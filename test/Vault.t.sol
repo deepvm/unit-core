@@ -99,9 +99,9 @@ contract VaultTest is Test {
         usdt.mint(address(minter), assets);
 
         deadline = block.timestamp + 1 days;
-        signature = _burnSignature(user, assets, deadline);
+        signature = _redeemSignature(user, assets, deadline);
         vm.prank(user);
-        minter.burn(assets, signer, deadline, signature);
+        minter.redeem(assets, signer, deadline, signature);
 
         assertEq(ausd.balanceOf(user), 0);
         assertEq(usdt.balanceOf(user), assets);
@@ -282,8 +282,8 @@ contract VaultTest is Test {
         );
     }
 
-    function _burnSignature(address account, uint256 assets, uint256 deadline) internal view returns (bytes memory) {
-        return _sign(keccak256(abi.encode(minter.BURN_TYPEHASH(), account, assets, minter.nonces(account), deadline)));
+    function _redeemSignature(address account, uint256 assets, uint256 deadline) internal view returns (bytes memory) {
+        return _sign(keccak256(abi.encode(minter.REDEEM_TYPEHASH(), account, assets, minter.nonces(account), deadline)));
     }
 
     function _sign(bytes32 structHash) internal view returns (bytes memory) {
@@ -302,5 +302,60 @@ contract VaultTest is Test {
                 address(minter)
             )
         );
+    }
+
+    function testBlacklistRestrictTransfer() public {
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _mintSignature(user, 100e6, custody, deadline);
+        vm.startPrank(user);
+        usdt.approve(address(minter), 100e6);
+        minter.mint(100e6, custody, signer, deadline, signature);
+        vm.stopPrank();
+
+        vm.prank(owner);
+        ausd.setBlacklist(user, true);
+
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(AUSD.AccountBlacklisted.selector, user));
+        ausd.transfer(owner, 10e6);
+
+        bytes32 minterRole = ausd.MINTER_ROLE();
+        vm.prank(owner);
+        ausd.grantRole(minterRole, owner);
+        vm.prank(owner);
+        ausd.mint(owner, 10e6);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AUSD.AccountBlacklisted.selector, user));
+        ausd.transfer(user, 10e6);
+    }
+
+    function testBlacklistRestrictMintAndBurn() public {
+        vm.prank(owner);
+        ausd.setBlacklist(user, true);
+
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _mintSignature(user, 100e6, custody, deadline);
+        vm.startPrank(user);
+        usdt.approve(address(minter), 100e6);
+        vm.expectRevert(abi.encodeWithSelector(AUSD.AccountBlacklisted.selector, user));
+        minter.mint(100e6, custody, signer, deadline, signature);
+        vm.stopPrank();
+    }
+
+    function testBlacklistOnlyBlacklister() public {
+        vm.prank(user);
+        vm.expectRevert();
+        ausd.setBlacklist(owner, true);
+    }
+
+    function testUnblacklist() public {
+        vm.prank(owner);
+        ausd.setBlacklist(user, true);
+        assertTrue(ausd.isBlacklisted(user));
+
+        vm.prank(owner);
+        ausd.setBlacklist(user, false);
+        assertFalse(ausd.isBlacklisted(user));
     }
 }
