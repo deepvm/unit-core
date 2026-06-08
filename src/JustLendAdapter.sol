@@ -53,6 +53,7 @@ contract JustLendAdapter is AccessControl {
     }
 
     function withdrawTo(uint256 amount, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (to == address(0)) revert ZeroAddress();
         uint256 err = jUSDT.redeemUnderlying(amount);
         if (err != 0) revert RedeemFailed(err);
         uint256 balance = usdt.balanceOf(address(this));
