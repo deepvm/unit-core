@@ -19,8 +19,8 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
-    bytes32 public constant BURN_TYPEHASH =
-        keccak256("Burn(address account,uint256 assets,uint256 nonce,uint256 deadline)");
+    bytes32 public constant REDEEM_TYPEHASH =
+        keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
     IERC20 public immutable USDT;
     AUSD public immutable aUSD;
@@ -54,10 +54,12 @@ contract Minter is AccessControl, EIP712, Nonces {
         aUSD.mint(msg.sender, assets);
     }
 
-    function burn(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
+    function redeem(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
         _checkPermit(
             signer,
-            _hashTypedDataV4(keccak256(abi.encode(BURN_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
+            _hashTypedDataV4(
+                keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))
+            ),
             deadline,
             signature
         );
