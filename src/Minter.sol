@@ -57,7 +57,9 @@ contract Minter is AccessControl, EIP712, Nonces {
     function redeem(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
         _checkPermit(
             signer,
-            _hashTypedDataV4(keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
+            _hashTypedDataV4(
+                keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))
+            ),
             deadline,
             signature
         );
