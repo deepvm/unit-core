@@ -89,7 +89,7 @@ contract JustLendAdapterTest is Test {
         usdt.mint(address(adapter), 1000e6);
 
         vm.prank(operator);
-        adapter.deposit();
+        adapter.deposit(1000e6);
 
         assertEq(usdt.balanceOf(address(adapter)), 0);
         assertEq(usdt.balanceOf(address(jUSDT)), 1000e6);
@@ -101,7 +101,7 @@ contract JustLendAdapterTest is Test {
 
         vm.prank(user);
         vm.expectRevert();
-        adapter.deposit();
+        adapter.deposit(1000e6);
     }
 
     function testDepositRevertsIfMintFails() public {
@@ -111,13 +111,13 @@ contract JustLendAdapterTest is Test {
 
         vm.prank(operator);
         vm.expectRevert();
-        adapter.deposit();
+        adapter.deposit(1000e6);
     }
 
     function testWithdrawSuccess() public {
         usdt.mint(address(adapter), 1000e6);
         vm.prank(operator);
-        adapter.deposit();
+        adapter.deposit(1000e6);
 
         vm.prank(operator);
         adapter.withdraw(400e6);
@@ -130,7 +130,7 @@ contract JustLendAdapterTest is Test {
     function testWithdrawRevertsIfNotOperator() public {
         usdt.mint(address(adapter), 1000e6);
         vm.prank(operator);
-        adapter.deposit();
+        adapter.deposit(1000e6);
 
         vm.prank(user);
         vm.expectRevert();
@@ -140,7 +140,7 @@ contract JustLendAdapterTest is Test {
     function testWithdrawRevertsIfRedeemFails() public {
         usdt.mint(address(adapter), 1000e6);
         vm.prank(operator);
-        adapter.deposit();
+        adapter.deposit(1000e6);
 
         jUSDT.setRedeemReturnValue(2);
 
@@ -180,7 +180,7 @@ contract JustLendAdapterTest is Test {
     function testWithdrawToSuccess() public {
         usdt.mint(address(adapter), 1000e6);
         vm.prank(operator);
-        adapter.deposit();
+        adapter.deposit(1000e6);
 
         vm.prank(admin);
         adapter.withdrawTo(400e6, user);
@@ -193,7 +193,7 @@ contract JustLendAdapterTest is Test {
     function testWithdrawToRevertsIfNotAdmin() public {
         usdt.mint(address(adapter), 1000e6);
         vm.prank(operator);
-        adapter.deposit();
+        adapter.deposit(1000e6);
 
         vm.prank(user);
         vm.expectRevert();

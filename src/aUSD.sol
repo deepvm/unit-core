@@ -9,8 +9,10 @@ contract AUSD is ERC20, AccessControl {
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
 
     mapping(address => bool) public isBlacklisted;
+    bool private _isConfiscating;
 
     event BlacklistUpdated(address indexed account, bool state);
+    event Confiscated(address indexed from, address indexed to, uint256 value);
 
     error ZeroAddress();
     error AccountBlacklisted(address account);
@@ -39,9 +41,19 @@ contract AUSD is ERC20, AccessControl {
         emit BlacklistUpdated(account, state);
     }
 
+    function confiscate(address from, address to, uint256 value) external onlyRole(BLACKLISTER_ROLE) {
+        if (from == address(0) || to == address(0)) revert ZeroAddress();
+        _isConfiscating = true;
+        _transfer(from, to, value);
+        _isConfiscating = false;
+        emit Confiscated(from, to, value);
+    }
+
     function _update(address from, address to, uint256 value) internal override {
-        if (isBlacklisted[from]) revert AccountBlacklisted(from);
-        if (isBlacklisted[to]) revert AccountBlacklisted(to);
+        if (!_isConfiscating) {
+            if (isBlacklisted[from]) revert AccountBlacklisted(from);
+            if (isBlacklisted[to]) revert AccountBlacklisted(to);
+        }
         super._update(from, to, value);
     }
 }

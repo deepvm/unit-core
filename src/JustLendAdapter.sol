@@ -39,25 +39,22 @@ contract JustLendAdapter is AccessControl {
         usdt.forceApprove(_jUSDT, type(uint256).max);
     }
 
-    function deposit() external onlyRole(OPERATOR_ROLE) {
-        uint256 balance = usdt.balanceOf(address(this));
-        uint256 err = jUSDT.mint(balance);
+    function deposit(uint256 amount) external onlyRole(OPERATOR_ROLE) {
+        uint256 err = jUSDT.mint(amount);
         if (err != 0) revert MintFailed(err);
     }
 
     function withdraw(uint256 amount) external onlyRole(OPERATOR_ROLE) {
         uint256 err = jUSDT.redeemUnderlying(amount);
         if (err != 0) revert RedeemFailed(err);
-        uint256 balance = usdt.balanceOf(address(this));
-        usdt.safeTransfer(minter, balance);
+        usdt.safeTransfer(minter, amount);
     }
 
     function withdrawTo(uint256 amount, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (to == address(0)) revert ZeroAddress();
         uint256 err = jUSDT.redeemUnderlying(amount);
         if (err != 0) revert RedeemFailed(err);
-        uint256 balance = usdt.balanceOf(address(this));
-        usdt.safeTransfer(to, balance);
+        usdt.safeTransfer(to, amount);
     }
 
     function setMinter(address _minter) external onlyRole(DEFAULT_ADMIN_ROLE) {

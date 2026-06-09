@@ -358,4 +358,28 @@ contract VaultTest is Test {
         ausd.setBlacklist(user, false);
         assertFalse(ausd.isBlacklisted(user));
     }
+
+    function testConfiscate() public {
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _mintSignature(user, 100e6, custody, deadline);
+        vm.startPrank(user);
+        usdt.approve(address(minter), 100e6);
+        minter.mint(100e6, custody, signer, deadline, signature);
+        vm.stopPrank();
+
+        vm.prank(owner);
+        ausd.setBlacklist(user, true);
+
+        vm.prank(owner);
+        ausd.confiscate(user, owner, 40e6);
+
+        assertEq(ausd.balanceOf(user), 60e6);
+        assertEq(ausd.balanceOf(owner), 40e6);
+    }
+
+    function testConfiscateOnlyAdmin() public {
+        vm.prank(user);
+        vm.expectRevert();
+        ausd.confiscate(user, owner, 10e6);
+    }
 }
