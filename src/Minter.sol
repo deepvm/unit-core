@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -36,6 +35,8 @@ contract Minter is AccessControl, EIP712, Nonces {
         USDT = usdt_;
         aUSD = ausd_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
+
+        USDT.forceApprove(address(this), type(uint256).max);
     }
 
     function mint(uint256 assets, address custody, address signer, uint256 deadline, bytes calldata signature)
@@ -64,7 +65,7 @@ contract Minter is AccessControl, EIP712, Nonces {
             signature
         );
         aUSD.burn(msg.sender, assets);
-        USDT.safeTransfer(msg.sender, assets);
+        USDT.safeTransferFrom(address(this), msg.sender, assets);
     }
 
     function mintYield(uint256 assets) external onlyRole(VAULT_ROLE) {
@@ -73,7 +74,7 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     function returnToCustody(address custody, uint256 assets) external onlyRole(OPERATOR_ROLE) {
         _checkRole(CUSTODY_ROLE, custody);
-        USDT.safeTransfer(custody, assets);
+        USDT.safeTransferFrom(address(this), custody, assets);
     }
 
     function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {
