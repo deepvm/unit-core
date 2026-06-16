@@ -6,21 +6,16 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract AUSD is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
+    bytes32 public constant CONFISCATOR_ROLE = keccak256("CONFISCATOR_ROLE");
 
-    mapping(address => bool) public isBlacklisted;
-    bool private _isConfiscating;
-
-    event BlacklistUpdated(address indexed account, bool state);
     event Confiscated(address indexed from, address indexed to, uint256 value);
 
     error ZeroAddress();
-    error AccountBlacklisted(address account);
 
     constructor(address admin_) ERC20("Altitude USD", "aUSD") {
         if (admin_ == address(0)) revert ZeroAddress();
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
-        _grantRole(BLACKLISTER_ROLE, admin_);
+        _grantRole(CONFISCATOR_ROLE, admin_);
     }
 
     function decimals() public pure override returns (uint8) {
@@ -35,25 +30,9 @@ contract AUSD is ERC20, AccessControl {
         _burn(from, assets);
     }
 
-    function setBlacklist(address account, bool state) external onlyRole(BLACKLISTER_ROLE) {
-        if (account == address(0)) revert ZeroAddress();
-        isBlacklisted[account] = state;
-        emit BlacklistUpdated(account, state);
-    }
-
-    function confiscate(address from, address to, uint256 value) external onlyRole(BLACKLISTER_ROLE) {
+    function confiscate(address from, address to, uint256 value) external onlyRole(CONFISCATOR_ROLE) {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
-        _isConfiscating = true;
         _transfer(from, to, value);
-        _isConfiscating = false;
         emit Confiscated(from, to, value);
-    }
-
-    function _update(address from, address to, uint256 value) internal override {
-        if (!_isConfiscating) {
-            if (isBlacklisted[from]) revert AccountBlacklisted(from);
-            if (isBlacklisted[to]) revert AccountBlacklisted(to);
-        }
-        super._update(from, to, value);
     }
 }
