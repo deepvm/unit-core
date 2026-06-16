@@ -8,27 +8,35 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {AUSD} from "./aUSD.sol";
 
-contract Minter is AccessControl, EIP712, Nonces {
+contract CustodyMinter is AccessControl, EIP712, Nonces {
     using SafeERC20 for IERC20;
 
-    bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
-    bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
 
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
+    bytes32 public constant BURN_TYPEHASH =
+        keccak256("Burn(address account,uint256 assets,uint256 nonce,uint256 deadline)");
     bytes32 public constant REDEEM_TYPEHASH =
         keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
     IERC20 public immutable USDT;
     AUSD public immutable aUSD;
 
+    mapping(address => uint256) public pendingRedeems;
+
+    event Minted(address indexed account, address indexed custody, uint256 assets);
+    event Burned(address indexed account, uint256 assets);
+    event Redeemed(address indexed account, uint256 assets);
+
     error ZeroAddress();
     error PermitExpired();
     error InvalidSignature();
+    error InsufficientBalance();
+    error InsufficientPendingRedeem();
 
-    constructor(address admin_, IERC20 usdt_, AUSD ausd_) EIP712("aUSD Minter", "1") {
+    constructor(address admin_, IERC20 usdt_, AUSD ausd_) EIP712("aUSD CustodyMinter", "1") {
         if (admin_ == address(0) || address(usdt_) == address(0) || address(ausd_) == address(0)) {
             revert ZeroAddress();
         }
@@ -53,28 +61,35 @@ contract Minter is AccessControl, EIP712, Nonces {
         );
         USDT.safeTransferFrom(msg.sender, custody, assets);
         aUSD.mint(msg.sender, assets);
+        emit Minted(msg.sender, custody, assets);
     }
 
-    function redeem(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
+    function burn(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
         _checkPermit(
             signer,
-            _hashTypedDataV4(
-                keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))
-            ),
+            _hashTypedDataV4(keccak256(abi.encode(BURN_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
             deadline,
             signature
         );
+        pendingRedeems[msg.sender] += assets;
         aUSD.burn(msg.sender, assets);
-        USDT.safeTransferFrom(address(this), msg.sender, assets);
+        emit Burned(msg.sender, assets);
     }
 
-    function mintYield(uint256 assets) external onlyRole(VAULT_ROLE) {
-        aUSD.mint(msg.sender, assets);
-    }
-
-    function returnToCustody(address custody, uint256 assets) external onlyRole(OPERATOR_ROLE) {
-        _checkRole(CUSTODY_ROLE, custody);
-        USDT.safeTransferFrom(address(this), custody, assets);
+    function redeem(address account, uint256 assets, address signer, uint256 deadline, bytes calldata signature)
+        external
+    {
+        _checkPermit(
+            signer,
+            _hashTypedDataV4(keccak256(abi.encode(REDEEM_TYPEHASH, account, assets, _useNonce(account), deadline))),
+            deadline,
+            signature
+        );
+        if (pendingRedeems[account] < assets) revert InsufficientPendingRedeem();
+        pendingRedeems[account] -= assets;
+        if (USDT.balanceOf(address(this)) < assets) revert InsufficientBalance();
+        USDT.safeTransferFrom(address(this), account, assets);
+        emit Redeemed(account, assets);
     }
 
     function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {
