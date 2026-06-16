@@ -28,6 +28,10 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
     AUSD public immutable aUSD;
     ITRC20JToken public immutable jUSDT;
 
+    event Minted(address indexed account, uint256 assets);
+    event Redeemed(address indexed account, uint256 assets);
+    event ProfitWithdrawn(address indexed to, uint256 amount);
+
     error ZeroAddress();
     error PermitExpired();
     error InvalidSignature();
@@ -61,6 +65,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
         uint256 err = jUSDT.mint(assets);
         if (err != 0) revert MintFailed(err);
         aUSD.mint(msg.sender, assets);
+        emit Minted(msg.sender, assets);
     }
 
     function redeem(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
@@ -76,6 +81,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
         uint256 err = jUSDT.redeemUnderlying(assets);
         if (err != 0) revert RedeemFailed(err);
         USDT.safeTransferFrom(address(this), msg.sender, assets);
+        emit Redeemed(msg.sender, assets);
     }
 
     function withdrawProfit(address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -87,6 +93,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
             uint256 err = jUSDT.redeemUnderlying(profit);
             if (err != 0) revert RedeemFailed(err);
             USDT.safeTransferFrom(address(this), to, profit);
+            emit ProfitWithdrawn(to, profit);
         }
     }
 

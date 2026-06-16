@@ -26,6 +26,10 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
 
     mapping(address => uint256) public pendingRedeems;
 
+    event Minted(address indexed account, address indexed custody, uint256 assets);
+    event Burned(address indexed account, uint256 assets);
+    event Redeemed(address indexed account, uint256 assets);
+
     error ZeroAddress();
     error PermitExpired();
     error InvalidSignature();
@@ -57,6 +61,7 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
         );
         USDT.safeTransferFrom(msg.sender, custody, assets);
         aUSD.mint(msg.sender, assets);
+        emit Minted(msg.sender, custody, assets);
     }
 
     function burn(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
@@ -66,8 +71,9 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
-        aUSD.burn(msg.sender, assets);
         pendingRedeems[msg.sender] += assets;
+        aUSD.burn(msg.sender, assets);
+        emit Burned(msg.sender, assets);
     }
 
     function redeem(address account, uint256 assets, address signer, uint256 deadline, bytes calldata signature)
@@ -83,6 +89,7 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
         pendingRedeems[account] -= assets;
         if (USDT.balanceOf(address(this)) < assets) revert InsufficientBalance();
         USDT.safeTransferFrom(address(this), account, assets);
+        emit Redeemed(account, assets);
     }
 
     function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {
