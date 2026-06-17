@@ -7,7 +7,7 @@ import {CustodyMinter} from "../src/CustodyMinter.sol";
 import {JustLendMinter, ITRC20JToken} from "../src/JustLendMinter.sol";
 import {UNIT} from "../src/UNIT.sol";
 import {MockTRONUSDT} from "./MockTRONUSDT.sol";
-import {MockjUSDT} from "../src/MockjUSDT.sol";
+import {MockjUSDT} from "./MockjUSDT.sol";
 
 contract ForkMainnetTest is Test {
     MockTRONUSDT usdt;
