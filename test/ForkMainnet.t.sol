@@ -5,14 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CustodyMinter} from "../src/CustodyMinter.sol";
 import {JustLendMinter, ITRC20JToken} from "../src/JustLendMinter.sol";
-import {AUSD} from "../src/aUSD.sol";
+import {UNIT} from "../src/UNIT.sol";
 import {MockTRONUSDT} from "./MockTRONUSDT.sol";
 import {MockjUSDT} from "../src/MockjUSDT.sol";
 
 contract ForkMainnetTest is Test {
     MockTRONUSDT usdt;
     MockjUSDT jUSDT;
-    AUSD ausd;
+    UNIT unitToken;
     CustodyMinter custodyMinter;
     JustLendMinter justLendMinter;
 
@@ -27,15 +27,15 @@ contract ForkMainnetTest is Test {
         // Deploy contracts
         usdt = new MockTRONUSDT();
         jUSDT = new MockjUSDT(address(usdt));
-        ausd = new AUSD(admin);
+        unitToken = new UNIT(admin);
 
-        custodyMinter = new CustodyMinter(admin, usdt, ausd);
-        justLendMinter = new JustLendMinter(admin, usdt, ausd, ITRC20JToken(address(jUSDT)));
+        custodyMinter = new CustodyMinter(admin, usdt, unitToken);
+        justLendMinter = new JustLendMinter(admin, usdt, unitToken, ITRC20JToken(address(jUSDT)));
 
         // Setup roles
         vm.startPrank(admin);
-        ausd.grantRole(ausd.MINTER_ROLE(), address(custodyMinter));
-        ausd.grantRole(ausd.MINTER_ROLE(), address(justLendMinter));
+        unitToken.grantRole(unitToken.MINTER_ROLE(), address(custodyMinter));
+        unitToken.grantRole(unitToken.MINTER_ROLE(), address(justLendMinter));
 
         custodyMinter.grantRole(custodyMinter.SIGNER_ROLE(), signer);
         custodyMinter.grantRole(custodyMinter.CUSTODY_ROLE(), custody);
@@ -59,7 +59,7 @@ contract ForkMainnetTest is Test {
                 bytes32(
                     keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
                 ),
-                bytes32(keccak256(bytes("aUSD CustodyMinter"))),
+                bytes32(keccak256(bytes("UNIT CustodyMinter"))),
                 bytes32(keccak256(bytes("1"))),
                 block.chainid,
                 address(custodyMinter)
@@ -76,7 +76,7 @@ contract ForkMainnetTest is Test {
         assertEq(usdt.balanceOf(user), 900e6);
         assertEq(usdt.balanceOf(address(custodyMinter)), 0);
         assertEq(usdt.balanceOf(custody), 100e6);
-        assertEq(ausd.balanceOf(user), 100e6);
+        assertEq(unitToken.balanceOf(user), 100e6);
 
         // 2. Burn (signature required)
         vm.startPrank(user);
@@ -88,7 +88,7 @@ contract ForkMainnetTest is Test {
         custodyMinter.burn(100e6, signer, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
-        assertEq(ausd.balanceOf(user), 0);
+        assertEq(unitToken.balanceOf(user), 0);
         assertEq(custodyMinter.pendingRedeems(user), 100e6);
 
         // Simulate custody transferring USDT to CustodyMinter after burn
@@ -126,7 +126,7 @@ contract ForkMainnetTest is Test {
                 bytes32(
                     keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
                 ),
-                bytes32(keccak256(bytes("aUSD JustLendMinter"))),
+                bytes32(keccak256(bytes("UNIT JustLendMinter"))),
                 bytes32(keccak256(bytes("1"))),
                 block.chainid,
                 address(justLendMinter)
@@ -141,16 +141,16 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         // Check balances:
-        // User has 900e6 USDT and 100e6 aUSD
+        // User has 900e6 USDT and 100e6 UNIT
         // JustLendMinter has 100e6 jUSDT (deposited into jUSDT)
         // jUSDT contract has 100e6 USDT
         assertEq(usdt.balanceOf(user), 900e6);
         assertEq(usdt.balanceOf(address(justLendMinter)), 0);
         assertEq(jUSDT.balanceOf(address(justLendMinter)), 100e6);
         assertEq(usdt.balanceOf(address(jUSDT)), 100e6);
-        assertEq(ausd.balanceOf(user), 100e6);
+        assertEq(unitToken.balanceOf(user), 100e6);
 
-        // 2. Redeem (burns aUSD, redeems jUSDT, sends USDT to user)
+        // 2. Redeem (burns UNIT, redeems jUSDT, sends USDT to user)
         vm.startPrank(user);
         nonce = justLendMinter.nonces(user);
         structHash = keccak256(abi.encode(justLendMinter.REDEEM_TYPEHASH(), user, 100e6, nonce, deadline));
@@ -161,7 +161,7 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         assertEq(usdt.balanceOf(user), 1000e6);
-        assertEq(ausd.balanceOf(user), 0);
+        assertEq(unitToken.balanceOf(user), 0);
         assertEq(jUSDT.balanceOf(address(justLendMinter)), 0);
         assertEq(usdt.balanceOf(address(jUSDT)), 0);
 
@@ -190,21 +190,21 @@ contract ForkMainnetTest is Test {
         // Verify profit was received
         assertEq(usdt.balanceOf(profitRecipient), 10e6);
         // Verify backing is still intact
-        assertEq(ausd.totalSupply(), 100e6);
+        assertEq(unitToken.totalSupply(), 100e6);
     }
 
     function testConfiscate() public {
-        // 1. Mint some aUSD to user
+        // 1. Mint some UNIT to user
         vm.prank(address(custodyMinter));
-        ausd.mint(user, 100e6);
-        assertEq(ausd.balanceOf(user), 100e6);
+        unitToken.mint(user, 100e6);
+        assertEq(unitToken.balanceOf(user), 100e6);
 
-        // 2. Confiscate user's aUSD
+        // 2. Confiscate user's UNIT
         vm.prank(admin);
-        ausd.confiscate(user, admin, 100e6);
+        unitToken.confiscate(user, admin, 100e6);
 
         // 3. Verify balances
-        assertEq(ausd.balanceOf(user), 0);
-        assertEq(ausd.balanceOf(admin), 100e6);
+        assertEq(unitToken.balanceOf(user), 0);
+        assertEq(unitToken.balanceOf(admin), 100e6);
     }
 }

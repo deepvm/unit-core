@@ -6,7 +6,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import {AUSD} from "./aUSD.sol";
+import {UNIT} from "./UNIT.sol";
 
 contract CustodyMinter is AccessControl, EIP712, Nonces {
     using SafeERC20 for IERC20;
@@ -22,7 +22,7 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
         keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
     IERC20 public immutable USDT;
-    AUSD public immutable aUSD;
+    UNIT public immutable UNITToken;
 
     mapping(address => uint256) public pendingRedeems;
 
@@ -36,12 +36,12 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
     error InsufficientBalance();
     error InsufficientPendingRedeem();
 
-    constructor(address admin_, IERC20 usdt_, AUSD ausd_) EIP712("aUSD CustodyMinter", "1") {
-        if (admin_ == address(0) || address(usdt_) == address(0) || address(ausd_) == address(0)) {
+    constructor(address admin_, IERC20 usdt_, UNIT unit_) EIP712("UNIT CustodyMinter", "1") {
+        if (admin_ == address(0) || address(usdt_) == address(0) || address(unit_) == address(0)) {
             revert ZeroAddress();
         }
         USDT = usdt_;
-        aUSD = ausd_;
+        UNITToken = unit_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
         USDT.forceApprove(address(this), type(uint256).max);
@@ -60,7 +60,7 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
             signature
         );
         USDT.safeTransferFrom(msg.sender, custody, assets);
-        aUSD.mint(msg.sender, assets);
+        UNITToken.mint(msg.sender, assets);
         emit Minted(msg.sender, custody, assets);
     }
 
@@ -72,7 +72,7 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
             signature
         );
         pendingRedeems[msg.sender] += assets;
-        aUSD.burn(msg.sender, assets);
+        UNITToken.burn(msg.sender, assets);
         emit Burned(msg.sender, assets);
     }
 
