@@ -22,7 +22,6 @@ docs/
 .DS_Store
 
 # Test
-MockjUSDT.sol
 deploy.js
 node_modules
 package*.json

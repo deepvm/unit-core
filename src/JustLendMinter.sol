@@ -6,7 +6,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import {AUSD} from "./aUSD.sol";
+import {UNIT} from "./UNIT.sol";
 
 interface ITRC20JToken {
     function mint(uint256 mintAmount) external returns (uint256);
@@ -25,7 +25,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
         keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
     IERC20 public immutable USDT;
-    AUSD public immutable aUSD;
+    UNIT public immutable UNITToken;
     ITRC20JToken public immutable jUSDT;
 
     event Minted(address indexed account, uint256 assets);
@@ -38,15 +38,15 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
     error MintFailed(uint256 errorCode);
     error RedeemFailed(uint256 errorCode);
 
-    constructor(address admin_, IERC20 usdt_, AUSD ausd_, ITRC20JToken jUsdt_) EIP712("aUSD JustLendMinter", "1") {
+    constructor(address admin_, IERC20 usdt_, UNIT unit_, ITRC20JToken jUsdt_) EIP712("UNIT JustLendMinter", "1") {
         if (
-            admin_ == address(0) || address(usdt_) == address(0) || address(ausd_) == address(0)
+            admin_ == address(0) || address(usdt_) == address(0) || address(unit_) == address(0)
                 || address(jUsdt_) == address(0)
         ) {
             revert ZeroAddress();
         }
         USDT = usdt_;
-        aUSD = ausd_;
+        UNITToken = unit_;
         jUSDT = jUsdt_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
@@ -64,7 +64,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
         USDT.safeTransferFrom(msg.sender, address(this), assets);
         uint256 err = jUSDT.mint(assets);
         if (err != 0) revert MintFailed(err);
-        aUSD.mint(msg.sender, assets);
+        UNITToken.mint(msg.sender, assets);
         emit Minted(msg.sender, assets);
     }
 
@@ -77,7 +77,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
-        aUSD.burn(msg.sender, assets);
+        UNITToken.burn(msg.sender, assets);
         uint256 err = jUSDT.redeemUnderlying(assets);
         if (err != 0) revert RedeemFailed(err);
         USDT.safeTransferFrom(address(this), msg.sender, assets);
@@ -87,7 +87,7 @@ contract JustLendMinter is AccessControl, EIP712, Nonces {
     function withdrawProfit(address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (to == address(0)) revert ZeroAddress();
         uint256 totalUnderlying = jUSDT.balanceOfUnderlying(address(this));
-        uint256 backingRequired = aUSD.totalSupply();
+        uint256 backingRequired = UNITToken.totalSupply();
         if (totalUnderlying > backingRequired) {
             uint256 profit = totalUnderlying - backingRequired;
             uint256 err = jUSDT.redeemUnderlying(profit);
