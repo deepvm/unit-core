@@ -43,9 +43,8 @@ contract MockjUSDT is ERC20 {
         if (redeemAmount > 0) {
             uint256 jTokenToBurn = balanceOf(msg.sender) >= redeemAmount ? redeemAmount : balanceOf(msg.sender);
             _burn(msg.sender, jTokenToBurn);
-            (bool success, ) = address(USDT).call(
-                abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, redeemAmount)
-            );
+            (bool success,) =
+                address(USDT).call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, redeemAmount));
             require(success, "USDT transfer failed");
         }
         return 0;
