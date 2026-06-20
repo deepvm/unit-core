@@ -6,9 +6,9 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import {UNIT} from "./UNIT.sol";
+import {Unit} from "./Unit.sol";
 
-contract CustodyMinter is AccessControl, EIP712, Nonces {
+contract Minter is AccessControl, EIP712, Nonces {
     using SafeERC20 for IERC20;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
@@ -16,13 +16,11 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
 
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
-    bytes32 public constant BURN_TYPEHASH =
-        keccak256("Burn(address account,uint256 assets,uint256 nonce,uint256 deadline)");
     bytes32 public constant REDEEM_TYPEHASH =
         keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
     IERC20 public immutable USDT;
-    UNIT public immutable UNITToken;
+    Unit public immutable UNIT;
 
     mapping(address => uint256) public pendingRedeems;
 
@@ -36,12 +34,12 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
     error InsufficientBalance();
     error InsufficientPendingRedeem();
 
-    constructor(address admin_, IERC20 usdt_, UNIT unit_) EIP712("UNIT CustodyMinter", "1") {
+    constructor(address admin_, IERC20 usdt_, Unit unit_) EIP712("Unit Minter", "1") {
         if (admin_ == address(0) || address(usdt_) == address(0) || address(unit_) == address(0)) {
             revert ZeroAddress();
         }
         USDT = usdt_;
-        UNITToken = unit_;
+        UNIT = unit_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
         USDT.forceApprove(address(this), type(uint256).max);
@@ -60,19 +58,13 @@ contract CustodyMinter is AccessControl, EIP712, Nonces {
             signature
         );
         USDT.safeTransferFrom(msg.sender, custody, assets);
-        UNITToken.mint(msg.sender, assets);
+        UNIT.mint(msg.sender, assets);
         emit Minted(msg.sender, custody, assets);
     }
 
-    function burn(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
-        _checkPermit(
-            signer,
-            _hashTypedDataV4(keccak256(abi.encode(BURN_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
-            deadline,
-            signature
-        );
+    function burn(uint256 assets) external {
         pendingRedeems[msg.sender] += assets;
-        UNITToken.burn(msg.sender, assets);
+        UNIT.burn(msg.sender, assets);
         emit Burned(msg.sender, assets);
     }
 
