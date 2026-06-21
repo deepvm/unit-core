@@ -6,7 +6,7 @@ import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.so
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Unit} from "./Unit.sol";
 
-contract sUnit is ERC4626, AccessControl {
+contract StakedUnit is ERC4626, AccessControl {
     uint256 private constant BPS = 10_000;
 
     uint256 public lastUpdate;
@@ -15,7 +15,7 @@ contract sUnit is ERC4626, AccessControl {
     error ZeroAddress();
     error InvalidAPY();
 
-    constructor(address admin_, IERC20 asset_) ERC20("Silo Unit", "sUNIT") ERC4626(asset_) {
+    constructor(address admin_, IERC20 asset_) ERC20("Staked Unit", "sUNIT") ERC4626(asset_) {
         if (admin_ == address(0)) {
             revert ZeroAddress();
         }

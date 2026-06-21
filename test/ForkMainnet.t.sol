@@ -5,14 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Minter} from "../src/Minter.sol";
 import {Unit} from "../src/Unit.sol";
-import {sUnit} from "../src/sUnit.sol";
+import {StakedUnit} from "../src/StakedUnit.sol";
 import {MockTRONUSDT} from "./MockTRONUSDT.sol";
 
 contract ForkMainnetTest is Test {
     MockTRONUSDT usdt;
     Unit UNIT;
     Minter minter;
-    sUnit sUNIT;
+    StakedUnit sUNIT;
 
     address admin = makeAddr("admin");
     address signer;
@@ -27,7 +27,7 @@ contract ForkMainnetTest is Test {
         UNIT = new Unit(admin);
 
         minter = new Minter(admin, usdt, UNIT);
-        sUNIT = new sUnit(admin, UNIT);
+        sUNIT = new StakedUnit(admin, UNIT);
 
         // Setup roles
         vm.startPrank(admin);
