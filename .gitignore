@@ -26,3 +26,4 @@ deploy.js
 node_modules
 package*.json
 *.js
+README.md
