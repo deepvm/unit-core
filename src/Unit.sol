@@ -12,7 +12,7 @@ contract Unit is ERC20, AccessControl {
 
     error ZeroAddress();
 
-    constructor(address admin_) ERC20("Unit", "UNIT") {
+    constructor(address admin_) ERC20("Unit USD", "unitUSD") {
         if (admin_ == address(0)) revert ZeroAddress();
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
         _grantRole(CONFISCATOR_ROLE, admin_);

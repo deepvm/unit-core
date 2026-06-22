@@ -15,7 +15,7 @@ contract StakedUnit is ERC4626, AccessControl {
     error ZeroAddress();
     error InvalidAPY();
 
-    constructor(address admin_, IERC20 asset_) ERC20("Staked Unit", "sUNIT") ERC4626(asset_) {
+    constructor(address admin_, IERC20 asset_) ERC20("Staked unitUSD", "sunitUSD") ERC4626(asset_) {
         if (admin_ == address(0)) {
             revert ZeroAddress();
         }
