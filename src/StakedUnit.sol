@@ -10,10 +10,11 @@ contract StakedUnit is ERC4626, AccessControl {
     uint256 private constant BPS = 10_000;
 
     uint256 public lastUpdate;
-    uint256 public apy;
+    uint256 public rate;
+    uint256 public totalAssetBalance;
 
     error ZeroAddress();
-    error InvalidAPY();
+    error InvalidRate();
 
     constructor(address admin_, IERC20 asset_) ERC20("Staked unitUSD", "sunitUSD") ERC4626(asset_) {
         if (admin_ == address(0)) {
@@ -23,28 +24,30 @@ contract StakedUnit is ERC4626, AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
     }
 
-    function setAPY(uint256 apy_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (apy_ > BPS) revert InvalidAPY();
+    function setRate(uint256 rate_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (rate_ > BPS) revert InvalidRate();
         _sync();
-        apy = apy_;
+        rate = rate_;
     }
 
     function totalAssets() public view override returns (uint256 assets) {
-        assets = super.totalAssets();
+        assets = totalAssetBalance;
         uint256 timeElapsed = block.timestamp - lastUpdate;
         if (timeElapsed > 0 && assets > 0) {
-            assets += (assets * apy * timeElapsed) / (BPS * 365 days);
+            assets += (assets * rate * timeElapsed) / (BPS * 365 days);
         }
     }
 
     function _transferIn(address from, uint256 assets) internal override {
         _sync();
         super._transferIn(from, assets);
+        totalAssetBalance += assets;
     }
 
     function _transferOut(address to, uint256 assets) internal override {
         _sync();
         super._transferOut(to, assets);
+        totalAssetBalance -= assets;
     }
 
     function _decimalsOffset() internal view virtual override returns (uint8) {
@@ -55,8 +58,11 @@ contract StakedUnit is ERC4626, AccessControl {
         uint256 timeElapsed = block.timestamp - lastUpdate;
         if (timeElapsed > 0) {
             lastUpdate = block.timestamp;
-            uint256 yield = (super.totalAssets() * apy * timeElapsed) / (BPS * 365 days);
-            if (yield > 0) Unit(address(asset())).mint(address(this), yield);
+            uint256 yield = (totalAssetBalance * rate * timeElapsed) / (BPS * 365 days);
+            if (yield > 0) {
+                totalAssetBalance += yield;
+                Unit(address(asset())).mint(address(this), yield);
+            }
         }
     }
 }
