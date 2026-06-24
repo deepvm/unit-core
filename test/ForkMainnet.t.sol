@@ -117,7 +117,7 @@ contract ForkMainnetTest is Test {
         assertEq(UNIT.balanceOf(admin), 100e6);
     }
 
-    function testsUNITDepositWithdrawAndAPY() public {
+    function testsUNITDepositWithdrawAndRate() public {
         // Mint some Unit to user
         vm.prank(address(minter));
         UNIT.mint(user, 200e6);
@@ -131,9 +131,9 @@ contract ForkMainnetTest is Test {
         assertEq(sUNIT.balanceOf(user), 100e18);
         assertEq(UNIT.balanceOf(user), 100e6);
 
-        // Set APY to 10% (1000 BPS)
+        // Set rate to 10% (1000 BPS)
         vm.prank(admin);
-        sUNIT.setAPY(1000);
+        sUNIT.setRate(1000);
 
         // Wrap forward 365 days
         vm.warp(block.timestamp + 365 days);
@@ -161,13 +161,13 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         vm.prank(admin);
-        sUNIT.setAPY(1000); // 10% APY
+        sUNIT.setRate(1000); // 10% rate
 
         // Run multiple rapid sync calls (simulating frequent syncs)
         for (uint256 i = 0; i < 10; i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(admin);
-            sUNIT.setAPY(1000);
+            sUNIT.setRate(1000);
         }
 
         // Verify yield is correctly accumulated and total assets grew
