@@ -6,7 +6,6 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract Unit is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant CONFISCATOR_ROLE = keccak256("CONFISCATOR_ROLE");
 
     event Confiscated(address indexed from, address indexed to, uint256 value);
 
@@ -15,7 +14,6 @@ contract Unit is ERC20, AccessControl {
     constructor(address admin_) ERC20("Unit USD", "unitUSD") {
         if (admin_ == address(0)) revert ZeroAddress();
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
-        _grantRole(CONFISCATOR_ROLE, admin_);
     }
 
     function decimals() public pure override returns (uint8) {
@@ -30,7 +28,7 @@ contract Unit is ERC20, AccessControl {
         _burn(from, assets);
     }
 
-    function confiscate(address from, address to, uint256 value) external onlyRole(CONFISCATOR_ROLE) {
+    function confiscate(address from, address to, uint256 value) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         _transfer(from, to, value);
         emit Confiscated(from, to, value);

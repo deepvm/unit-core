@@ -3,10 +3,10 @@ pragma solidity 0.8.26;
 
 import {IERC20, ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Unit} from "./Unit.sol";
 
-contract StakedUnit is ERC4626, AccessControl {
+contract StakedUnit is ERC4626, Ownable {
     uint256 private constant BPS = 10_000;
 
     uint256 public lastUpdate;
@@ -16,15 +16,11 @@ contract StakedUnit is ERC4626, AccessControl {
     error ZeroAddress();
     error InvalidRate();
 
-    constructor(address admin_, IERC20 asset_) ERC20("Staked unitUSD", "sunitUSD") ERC4626(asset_) {
-        if (admin_ == address(0)) {
-            revert ZeroAddress();
-        }
+    constructor(address admin_, IERC20 asset_) ERC20("Staked unitUSD", "sunitUSD") ERC4626(asset_) Ownable(admin_) {
         lastUpdate = block.timestamp;
-        _grantRole(DEFAULT_ADMIN_ROLE, admin_);
     }
 
-    function setRate(uint256 rate_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setRate(uint256 rate_) external onlyOwner {
         if (rate_ > BPS) revert InvalidRate();
         _sync();
         rate = rate_;
