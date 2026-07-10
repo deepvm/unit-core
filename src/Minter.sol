@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.26;
+pragma solidity 0.8.27;
 
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Unit} from "./Unit.sol";
 
 contract Minter is AccessControl, EIP712, Nonces {
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
@@ -30,7 +31,6 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     error ZeroAddress();
     error PermitExpired();
-    error InvalidSignature();
     error InsufficientBalance();
     error InsufficientPendingRedeem();
 
@@ -45,21 +45,20 @@ contract Minter is AccessControl, EIP712, Nonces {
         USDT.forceApprove(address(this), type(uint256).max);
     }
 
-    function mint(uint256 assets, address custody, address signer, uint256 deadline, bytes calldata signature)
-        external
-    {
+    function mint(uint256 assets, address custody, uint256 deadline, bytes calldata signature) external {
         _checkRole(CUSTODY_ROLE, custody);
         _checkPermit(
-            signer,
             _hashTypedDataV4(
                 keccak256(abi.encode(MINT_TYPEHASH, msg.sender, custody, assets, _useNonce(msg.sender), deadline))
             ),
             deadline,
             signature
         );
+        uint256 balanceBefore = USDT.balanceOf(custody);
         USDT.safeTransferFrom(msg.sender, custody, assets);
-        UNIT.mint(msg.sender, assets);
-        emit Minted(msg.sender, custody, assets);
+        uint256 received = USDT.balanceOf(custody) - balanceBefore;
+        UNIT.mint(msg.sender, received);
+        emit Minted(msg.sender, custody, received);
     }
 
     function burn(uint256 assets) external {
@@ -68,25 +67,27 @@ contract Minter is AccessControl, EIP712, Nonces {
         emit Burned(msg.sender, assets);
     }
 
-    function redeem(address account, uint256 assets, address signer, uint256 deadline, bytes calldata signature)
-        external
-    {
+    function redeem(uint256 assets, uint256 deadline, bytes calldata signature) external {
         _checkPermit(
-            signer,
-            _hashTypedDataV4(keccak256(abi.encode(REDEEM_TYPEHASH, account, assets, _useNonce(account), deadline))),
+            _hashTypedDataV4(
+                keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))
+            ),
             deadline,
             signature
         );
-        if (pendingRedeems[account] < assets) revert InsufficientPendingRedeem();
-        pendingRedeems[account] -= assets;
-        if (USDT.balanceOf(address(this)) < assets) revert InsufficientBalance();
-        USDT.safeTransferFrom(address(this), account, assets);
-        emit Redeemed(account, assets);
+        if (pendingRedeems[msg.sender] < assets) revert InsufficientPendingRedeem();
+        pendingRedeems[msg.sender] -= assets;
+        USDT.safeTransferFrom(address(this), msg.sender, assets);
+        emit Redeemed(msg.sender, assets);
     }
 
-    function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {
+    function returnToCustody(address custody, uint256 assets) external onlyRole(SIGNER_ROLE) {
+        _checkRole(CUSTODY_ROLE, custody);
+        USDT.safeTransferFrom(address(this), custody, assets);
+    }
+
+    function _checkPermit(bytes32 digest, uint256 deadline, bytes calldata signature) private view {
         if (block.timestamp > deadline) revert PermitExpired();
-        _checkRole(SIGNER_ROLE, signer);
-        if (!SignatureChecker.isValidSignatureNowCalldata(signer, digest, signature)) revert InvalidSignature();
+        _checkRole(SIGNER_ROLE, digest.recover(signature));
     }
 }
