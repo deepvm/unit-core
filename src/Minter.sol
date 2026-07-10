@@ -57,9 +57,11 @@ contract Minter is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
+        uint256 balanceBefore = USDT.balanceOf(custody);
         USDT.safeTransferFrom(msg.sender, custody, assets);
-        UNIT.mint(msg.sender, assets);
-        emit Minted(msg.sender, custody, assets);
+        uint256 received = USDT.balanceOf(custody) - balanceBefore;
+        UNIT.mint(msg.sender, received);
+        emit Minted(msg.sender, custody, received);
     }
 
     function burn(uint256 assets) external {
@@ -68,20 +70,20 @@ contract Minter is AccessControl, EIP712, Nonces {
         emit Burned(msg.sender, assets);
     }
 
-    function redeem(address account, uint256 assets, address signer, uint256 deadline, bytes calldata signature)
+    function redeem(uint256 assets, address signer, uint256 deadline, bytes calldata signature)
         external
     {
         _checkPermit(
             signer,
-            _hashTypedDataV4(keccak256(abi.encode(REDEEM_TYPEHASH, account, assets, _useNonce(account), deadline))),
+            _hashTypedDataV4(keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
             deadline,
             signature
         );
-        if (pendingRedeems[account] < assets) revert InsufficientPendingRedeem();
-        pendingRedeems[account] -= assets;
+        if (pendingRedeems[msg.sender] < assets) revert InsufficientPendingRedeem();
+        pendingRedeems[msg.sender] -= assets;
         if (USDT.balanceOf(address(this)) < assets) revert InsufficientBalance();
-        USDT.safeTransferFrom(address(this), account, assets);
-        emit Redeemed(account, assets);
+        USDT.safeTransferFrom(address(this), msg.sender, assets);
+        emit Redeemed(msg.sender, assets);
     }
 
     function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {

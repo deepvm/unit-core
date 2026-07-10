@@ -94,7 +94,7 @@ contract ForkMainnetTest is Test {
         digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(1, digest);
 
-        minter.redeem(user, 100e6, signer, deadline, abi.encodePacked(r, s, v));
+        minter.redeem(100e6, signer, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
         assertEq(usdt.balanceOf(user), 1000e6);

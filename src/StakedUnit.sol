@@ -56,10 +56,12 @@ contract StakedUnit is ERC4626, AccessControl {
 
     function _sync() private {
         uint256 timeElapsed = block.timestamp - lastUpdate;
-        if (timeElapsed > 0) {
+        if (totalAssetBalance == 0) {
             lastUpdate = block.timestamp;
+        } else {
             uint256 yield = (totalAssetBalance * rate * timeElapsed) / (BPS * 365 days);
             if (yield > 0) {
+                lastUpdate = block.timestamp;
                 totalAssetBalance += yield;
                 Unit(address(asset())).mint(address(this), yield);
             }
