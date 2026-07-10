@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.26;
+pragma solidity 0.8.27;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -276,7 +276,7 @@ contract ForkMainnetTest is Test {
         // User A should get ~110.25 UNIT (100 + 5 + 5.25 pro-rata)
         // User B should get ~105 UNIT (100 + 5 pro-rata)
         assertApproxEqAbs(UNIT.balanceOf(userA), 110.25e6, 1e2);
-        assertApproxEqAbs(UNIT.balanceOf(userB), 105.00e6, 1e2);
+        assertApproxEqAbs(UNIT.balanceOf(userB), 105.0e6, 1e2);
     }
 
     function testVaultInflationAttackPrevention() public {
