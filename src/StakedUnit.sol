@@ -13,7 +13,6 @@ contract StakedUnit is ERC4626, Ownable {
     uint256 public rate;
     uint256 public totalAssetBalance;
 
-    error ZeroAddress();
     error InvalidRate();
 
     constructor(address admin_, IERC20 asset_) ERC20("Staked unitUSD", "sunitUSD") ERC4626(asset_) Ownable(admin_) {

@@ -29,7 +29,6 @@ contract Unit is ERC20, AccessControl {
     }
 
     function confiscate(address from, address to, uint256 value) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (from == address(0) || to == address(0)) revert ZeroAddress();
         _transfer(from, to, value);
         emit Confiscated(from, to, value);
     }

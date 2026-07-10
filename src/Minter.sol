@@ -81,7 +81,6 @@ contract Minter is AccessControl, EIP712, Nonces {
         );
         if (pendingRedeems[msg.sender] < assets) revert InsufficientPendingRedeem();
         pendingRedeems[msg.sender] -= assets;
-        if (USDT.balanceOf(address(this)) < assets) revert InsufficientBalance();
         USDT.safeTransferFrom(address(this), msg.sender, assets);
         emit Redeemed(msg.sender, assets);
     }
