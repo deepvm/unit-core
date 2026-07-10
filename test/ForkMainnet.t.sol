@@ -361,4 +361,31 @@ contract ForkMainnetTest is Test {
         assertEq(UNIT.balanceOf(userA), 0);
         assertEq(UNIT.balanceOf(admin), 100e6);
     }
+
+    function testReturnToCustody() public {
+        usdt.mint(address(minter), 500e6);
+
+        // A valid signer calls returnToCustody to send funds to a verified custody address
+        vm.prank(signer);
+        minter.returnToCustody(custody, 300e6);
+
+        assertEq(usdt.balanceOf(address(minter)), 200e6);
+        assertEq(usdt.balanceOf(custody), 300e6);
+    }
+
+    function testReturnToCustodySecurity() public {
+        usdt.mint(address(minter), 500e6);
+
+        // 1. Non-signer calls returnToCustody -> should revert
+        vm.startPrank(userA);
+        vm.expectRevert();
+        minter.returnToCustody(custody, 100e6);
+        vm.stopPrank();
+
+        // 2. Signer calls returnToCustody to an unverified custody address -> should revert
+        vm.startPrank(signer);
+        vm.expectRevert();
+        minter.returnToCustody(userA, 100e6);
+        vm.stopPrank();
+    }
 }

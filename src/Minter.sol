@@ -81,6 +81,11 @@ contract Minter is AccessControl, EIP712, Nonces {
         emit Redeemed(msg.sender, assets);
     }
 
+    function returnToCustody(address custody, uint256 assets) external onlyRole(SIGNER_ROLE) {
+        _checkRole(CUSTODY_ROLE, custody);
+        USDT.safeTransferFrom(address(this), custody, assets);
+    }
+
     function _checkPermit(bytes32 digest, uint256 deadline, bytes calldata signature) private view {
         if (block.timestamp > deadline) revert PermitExpired();
         _checkRole(SIGNER_ROLE, digest.recover(signature));
