@@ -5,11 +5,12 @@ import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeE
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Unit} from "./Unit.sol";
 
 contract Minter is AccessControl, EIP712, Nonces {
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
@@ -30,7 +31,6 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     error ZeroAddress();
     error PermitExpired();
-    error InvalidSignature();
     error InsufficientBalance();
     error InsufficientPendingRedeem();
 
@@ -45,12 +45,9 @@ contract Minter is AccessControl, EIP712, Nonces {
         USDT.forceApprove(address(this), type(uint256).max);
     }
 
-    function mint(uint256 assets, address custody, address signer, uint256 deadline, bytes calldata signature)
-        external
-    {
+    function mint(uint256 assets, address custody, uint256 deadline, bytes calldata signature) external {
         _checkRole(CUSTODY_ROLE, custody);
         _checkPermit(
-            signer,
             _hashTypedDataV4(
                 keccak256(abi.encode(MINT_TYPEHASH, msg.sender, custody, assets, _useNonce(msg.sender), deadline))
             ),
@@ -70,9 +67,8 @@ contract Minter is AccessControl, EIP712, Nonces {
         emit Burned(msg.sender, assets);
     }
 
-    function redeem(uint256 assets, address signer, uint256 deadline, bytes calldata signature) external {
+    function redeem(uint256 assets, uint256 deadline, bytes calldata signature) external {
         _checkPermit(
-            signer,
             _hashTypedDataV4(
                 keccak256(abi.encode(REDEEM_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))
             ),
@@ -85,9 +81,8 @@ contract Minter is AccessControl, EIP712, Nonces {
         emit Redeemed(msg.sender, assets);
     }
 
-    function _checkPermit(address signer, bytes32 digest, uint256 deadline, bytes calldata signature) private view {
+    function _checkPermit(bytes32 digest, uint256 deadline, bytes calldata signature) private view {
         if (block.timestamp > deadline) revert PermitExpired();
-        _checkRole(SIGNER_ROLE, signer);
-        if (!SignatureChecker.isValidSignatureNowCalldata(signer, digest, signature)) revert InvalidSignature();
+        _checkRole(SIGNER_ROLE, digest.recover(signature));
     }
 }
