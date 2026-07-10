@@ -20,10 +20,3 @@ docs/
 !.env.example
 
 .DS_Store
-
-# Test
-deploy.js
-node_modules
-package*.json
-*.js
-README.md
