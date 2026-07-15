@@ -55,8 +55,8 @@ contract StakedUnit is ERC4626, Ownable {
             lastUpdate = block.timestamp;
         } else {
             uint256 yield = (totalAssetBalance * rate * timeElapsed) / (BPS * 365 days);
+            lastUpdate = block.timestamp;
             if (yield > 0) {
-                lastUpdate = block.timestamp;
                 totalAssetBalance += yield;
                 Unit(address(asset())).mint(address(this), yield);
             }
