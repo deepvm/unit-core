@@ -25,7 +25,6 @@ contract Minter2 is AccessControl, EIP712, Nonces {
     using ECDSA for bytes32;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
-
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,uint256 assets,uint256 nonce,uint256 deadline)");
     bytes32 public constant REDEEM_TYPEHASH =
@@ -50,9 +49,7 @@ contract Minter2 is AccessControl, EIP712, Nonces {
         if (
             admin_ == address(0) || address(usdt_) == address(0) || address(unit_) == address(0)
                 || address(usdd_) == address(0) || address(psm_) == address(0) || address(jUsdd_) == address(0)
-        ) {
-            revert ZeroAddress();
-        }
+        ) revert ZeroAddress();
         USDT = usdt_;
         UNIT = unit_;
         USDD = usdd_;
@@ -73,16 +70,13 @@ contract Minter2 is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
-
         USDT.safeTransferFrom(msg.sender, address(this), assets);
 
         uint256 usddBefore = USDD.balanceOf(address(this));
         PSM.sellGem(address(this), assets);
         uint256 usddReceived = USDD.balanceOf(address(this)) - usddBefore;
 
-        if (usddReceived > 0) {
-            if (jUSDD.mint(usddReceived) != 0) revert OperationFailed();
-        }
+        if (usddReceived > 0 && jUSDD.mint(usddReceived) != 0) revert OperationFailed();
 
         uint256 unitToMint = usddReceived / 1e12;
         UNIT.mint(msg.sender, unitToMint);
@@ -97,7 +91,6 @@ contract Minter2 is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
-
         UNIT.burn(msg.sender, assets);
 
         uint256 tout = PSM.tout();
@@ -105,12 +98,11 @@ contract Minter2 is AccessControl, EIP712, Nonces {
 
         uint256 usddRequired = gemAmt * 1e12 + (gemAmt * tout) / 1e6;
         uint256 usddBalance = USDD.balanceOf(address(this));
-        if (usddRequired > usddBalance) {
-            if (jUSDD.redeemUnderlying(usddRequired - usddBalance) != 0) revert OperationFailed();
+        if (usddRequired > usddBalance && jUSDD.redeemUnderlying(usddRequired - usddBalance) != 0) {
+            revert OperationFailed();
         }
 
         PSM.buyGem(address(this), gemAmt);
-
         USDT.safeTransferFrom(address(this), msg.sender, gemAmt);
         emit Redeemed(msg.sender, gemAmt);
     }
