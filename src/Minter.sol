@@ -17,6 +17,8 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     bytes32 public constant MINT_TYPEHASH =
         keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
+    bytes32 public constant BURN_TYPEHASH =
+        keccak256("Burn(address account,uint256 assets,uint256 nonce,uint256 deadline)");
     bytes32 public constant REDEEM_TYPEHASH =
         keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
@@ -31,7 +33,6 @@ contract Minter is AccessControl, EIP712, Nonces {
 
     error ZeroAddress();
     error PermitExpired();
-    error InsufficientBalance();
     error InsufficientPendingRedeem();
 
     constructor(address admin_, IERC20 usdt_, Unit unit_) EIP712("Unit Minter", "1") {
@@ -54,14 +55,17 @@ contract Minter is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
-        uint256 balanceBefore = USDT.balanceOf(custody);
         USDT.safeTransferFrom(msg.sender, custody, assets);
-        uint256 received = USDT.balanceOf(custody) - balanceBefore;
-        UNIT.mint(msg.sender, received);
-        emit Minted(msg.sender, custody, received);
+        UNIT.mint(msg.sender, assets);
+        emit Minted(msg.sender, custody, assets);
     }
 
-    function burn(uint256 assets) external {
+    function burn(uint256 assets, uint256 deadline, bytes calldata signature) external {
+        _checkPermit(
+            _hashTypedDataV4(keccak256(abi.encode(BURN_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
+            deadline,
+            signature
+        );
         pendingRedeems[msg.sender] += assets;
         UNIT.burn(msg.sender, assets);
         emit Burned(msg.sender, assets);
