@@ -69,14 +69,7 @@ contract ForkMainnetTest is Test {
         UNIT = new Unit(admin);
         minter = new Minter(admin, IERC20(USDT_ADDR), UNIT);
         sUNIT = new StakedUnit(admin, UNIT);
-        minter2 = new Minter2(
-            admin,
-            IERC20(USDT_ADDR),
-            UNIT,
-            IERC20(USDD_ADDR),
-            IPSM(PSM_ADDR),
-            ICErc20(jUSDD_ADDR)
-        );
+        minter2 = new Minter2(admin, IERC20(USDT_ADDR), UNIT, IERC20(USDD_ADDR), IPSM(PSM_ADDR), ICErc20(jUSDD_ADDR));
 
         // Setup access control roles
         vm.startPrank(admin);
@@ -139,7 +132,12 @@ contract ForkMainnetTest is Test {
 
         // --- 2. Burn ---
         vm.startPrank(userA);
-        minter.burn(100e6);
+        deadline = block.timestamp + 1 hours;
+        nonce = minter.nonces(userA);
+        structHash = keccak256(abi.encode(minter.BURN_TYPEHASH(), userA, 100e6, nonce, deadline));
+        digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (v, r, s) = vm.sign(signerKey, digest);
+        minter.burn(100e6, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
         assertEq(UNIT.balanceOf(userA), 0);
@@ -228,6 +226,71 @@ contract ForkMainnetTest is Test {
         // Attempting to reuse the signature must fail because the nonce is already used
         vm.expectRevert();
         minter.mint(100e6, custody, deadline, signature);
+        vm.stopPrank();
+    }
+
+    function testMinterBurnInvalidSignature() public {
+        vm.prank(address(minter));
+        UNIT.mint(userA, 100e6);
+
+        vm.startPrank(userA);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = minter.nonces(userA);
+
+        bytes32 structHash = keccak256(abi.encode(minter.BURN_TYPEHASH(), userA, 100e6, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+
+        // Sign with an unauthorized key (0xBAD)
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xBAD, digest);
+
+        bytes memory badSignature = abi.encodePacked(r, s, v);
+        vm.expectRevert();
+        minter.burn(100e6, deadline, badSignature);
+        vm.stopPrank();
+    }
+
+    function testMinterBurnExpiredSignature() public {
+        vm.prank(address(minter));
+        UNIT.mint(userA, 100e6);
+
+        vm.startPrank(userA);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = minter.nonces(userA);
+
+        bytes32 structHash = keccak256(abi.encode(minter.BURN_TYPEHASH(), userA, 100e6, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Warp time past deadline
+        vm.warp(deadline + 1 seconds);
+
+        vm.expectRevert(Minter.PermitExpired.selector);
+        minter.burn(100e6, deadline, signature);
+        vm.stopPrank();
+    }
+
+    function testMinterBurnReplayAttackBlocked() public {
+        vm.prank(address(minter));
+        UNIT.mint(userA, 200e6);
+
+        vm.startPrank(userA);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = minter.nonces(userA);
+
+        bytes32 structHash = keccak256(abi.encode(minter.BURN_TYPEHASH(), userA, 100e6, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // First burn succeeds
+        minter.burn(100e6, deadline, signature);
+
+        // Attempting to reuse the signature must fail because the nonce is already used
+        vm.expectRevert();
+        minter.burn(100e6, deadline, signature);
         vm.stopPrank();
     }
 
@@ -539,7 +602,8 @@ contract ForkMainnetTest is Test {
         // totalUSDD = (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2))
         // requiredUSDD = UNIT.totalSupply() * 1e12
         // yieldUSDD = totalUSDD - requiredUSDD
-        uint256 totalUSDD = (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2));
+        uint256 totalUSDD =
+            (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2));
         uint256 requiredUSDD = UNIT.totalSupply() * 1e12;
         uint256 yieldUSDD = totalUSDD > requiredUSDD ? totalUSDD - requiredUSDD : 0;
         assertEq(yieldUSDD, 0);
@@ -548,7 +612,8 @@ contract ForkMainnetTest is Test {
         jUSDD.accrueYield(30e18);
 
         // Re-evaluate yieldUSDD off-chain
-        totalUSDD = (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2));
+        totalUSDD =
+            (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2));
         yieldUSDD = totalUSDD > requiredUSDD ? totalUSDD - requiredUSDD : 0;
         assertEq(yieldUSDD, 30e18);
 
@@ -616,7 +681,8 @@ contract ForkMainnetTest is Test {
         // Debt is 100e6 USDT. Required USDD = 100e18.
         // Total USDD = 150e18.
         // Yield should be exactly 150e18 - 100e18 = 50e18 USDD.
-        uint256 totalUSDD = (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2));
+        uint256 totalUSDD =
+            (jUSDD.balanceOf(address(minter2)) * jUSDD.exchangeRateStored()) / 1e18 + usdd.balanceOf(address(minter2));
         uint256 requiredUSDD = UNIT.totalSupply() * 1e12;
         uint256 yieldUSDD = totalUSDD > requiredUSDD ? totalUSDD - requiredUSDD : 0;
         assertEq(yieldUSDD, 50e18);
@@ -648,5 +714,32 @@ contract ForkMainnetTest is Test {
 
         deal(USDD_ADDR, userB, 1000e18);
         assertEq(usdd.balanceOf(userB), 1000e18);
+    }
+
+    function testYieldLossDueToFrequentSyncs() public {
+        vm.prank(address(minter));
+        UNIT.mint(userA, 100e6);
+
+        // User A deposits 100 UNIT
+        vm.startPrank(userA);
+        UNIT.approve(address(sUNIT), 100e6);
+        sUNIT.deposit(100e6, userA);
+        vm.stopPrank();
+
+        // Set rate to 10% APY (1000 BPS)
+        vm.prank(admin);
+        sUNIT.setRate(1000);
+
+        // Call setRate (triggers _sync()) every 3 seconds for 1000 times (total 3000 seconds)
+        // With the new code, lastUpdate is updated every time, resetting timeElapsed.
+        // Because of this, yield is 0 every time and lastUpdate moves forward, losing the time.
+        for (uint256 i = 0; i < 1000; i++) {
+            vm.warp(block.timestamp + 3 seconds);
+            vm.prank(admin);
+            sUNIT.setRate(1000);
+        }
+
+        // Under the new code, since we synced every 3 seconds, all yield is lost (yield is 0).
+        assertEq(sUNIT.totalAssets(), 100e6);
     }
 }
