@@ -525,11 +525,11 @@ contract ForkMainnetTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = minter2.nonces(userA);
 
-        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, USDD_ADDR, 100e6, nonce, deadline));
+        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, 100e6, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator2, structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        minter2.mint(100e6, USDD_ADDR, deadline, abi.encodePacked(r, s, v));
+        minter2.mint(100e6, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
         // Checks:
@@ -541,22 +541,7 @@ contract ForkMainnetTest is Test {
         // jUSDD should have 100e18 USDD of underlying value (since 1:1 swap and deposit)
         assertEq(jUSDD.balanceOfUnderlying(address(minter2)), 100e18);
 
-        // --- 2. Burn ---
-        vm.startPrank(userA);
-        minter2.burn(40e6);
-        vm.stopPrank();
-
-        // Checks:
-        // userA's UNIT balance should decrease by 40e6.
-        assertEq(UNIT.balanceOf(userA), 60e6);
-        // pendingRedeems of userA should increase by 40e6.
-        assertEq(minter2.pendingRedeems(userA), 40e6);
-        // 40e6 USDT should be redeemed back from JustLend/PSM and sit on Minter2's balance
-        assertEq(usdt.balanceOf(address(minter2)), 40e6);
-        // The remaining jUSDD underlying should be 60e18 USDD
-        assertEq(jUSDD.balanceOfUnderlying(address(minter2)), 60e18);
-
-        // --- 3. Redeem ---
+        // --- 2. Redeem ---
         vm.startPrank(userA);
         nonce = minter2.nonces(userA);
         structHash = keccak256(abi.encode(minter2.REDEEM_TYPEHASH(), userA, 40e6, nonce, deadline));
@@ -567,10 +552,13 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         // Checks:
+        // userA's UNIT balance should decrease by 40e6.
+        assertEq(UNIT.balanceOf(userA), 60e6);
         // userA should get 40e6 USDT back.
         assertEq(usdt.balanceOf(userA), 940e6);
-        assertEq(minter2.pendingRedeems(userA), 0);
         assertEq(usdt.balanceOf(address(minter2)), 0);
+        // The remaining jUSDD underlying should be 60e18 USDD
+        assertEq(jUSDD.balanceOfUnderlying(address(minter2)), 60e18);
     }
 
     function testMinter2YieldWithdrawal() public {
@@ -582,20 +570,20 @@ contract ForkMainnetTest is Test {
         usdt.approve(address(minter2), 100e6);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = minter2.nonces(userA);
-        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, USDD_ADDR, 100e6, nonce, deadline));
+        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, 100e6, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator2, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        minter2.mint(100e6, USDD_ADDR, deadline, abi.encodePacked(r, s, v));
+        minter2.mint(100e6, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
         // userB deposits 200 USDT
         vm.startPrank(userB);
         usdt.approve(address(minter2), 200e6);
         nonce = minter2.nonces(userB);
-        structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userB, USDD_ADDR, 200e6, nonce, deadline));
+        structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userB, 200e6, nonce, deadline));
         digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator2, structHash));
         (v, r, s) = vm.sign(signerKey, digest);
-        minter2.mint(200e6, USDD_ADDR, deadline, abi.encodePacked(r, s, v));
+        minter2.mint(200e6, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
         // --- Off-Chain Admin Calculation Helper ---
@@ -668,10 +656,10 @@ contract ForkMainnetTest is Test {
         usdt.approve(address(minter2), 100e6);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = minter2.nonces(userA);
-        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, USDD_ADDR, 100e6, nonce, deadline));
+        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, 100e6, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator2, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        minter2.mint(100e6, USDD_ADDR, deadline, abi.encodePacked(r, s, v));
+        minter2.mint(100e6, deadline, abi.encodePacked(r, s, v));
         vm.stopPrank();
 
         // Accrue interest of 50 USDD
@@ -741,5 +729,57 @@ contract ForkMainnetTest is Test {
 
         // Under the new code, since we synced every 3 seconds, all yield is lost (yield is 0).
         assertEq(sUNIT.totalAssets(), 100e6);
+    }
+
+    function testMinter2WithTinAndToutFees() public {
+        // Setup PSM tin (deposit fee) to 2% (2 * 10**16)
+        psm.setTin(2 * 10 ** 16);
+        // Setup PSM tout (exit fee) to 5% (5 * 10**16)
+        psm.setTout(5 * 10 ** 16);
+
+        usdt.mint(userA, 1000e6);
+
+        // --- 1. Mint ---
+        vm.startPrank(userA);
+        usdt.approve(address(minter2), 100e6);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = minter2.nonces(userA);
+
+        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, 100e6, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator2, structHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        minter2.mint(100e6, deadline, abi.encodePacked(r, s, v));
+        vm.stopPrank();
+
+        // Checks:
+        // USDT should have been transferred to minter2 (100e6).
+        assertEq(usdt.balanceOf(userA), 900e6);
+        // User A should get 98 UNIT (100 USDT - 2% tin fee)
+        assertEq(UNIT.balanceOf(userA), 98e6);
+        // jUSDD should have 98e18 USDD of underlying value (since 2% tin fee is subtracted in sellGem)
+        assertEq(jUSDD.balanceOfUnderlying(address(minter2)), 98e18);
+
+        // --- 2. Redeem ---
+        vm.startPrank(userA);
+        nonce = minter2.nonces(userA);
+        uint256 burnAmt = 98e6;
+        uint256 expectedGemAmt = (burnAmt * 1e18) / (1e18 + 5 * 10 ** 16);
+
+        structHash = keccak256(abi.encode(minter2.REDEEM_TYPEHASH(), userA, burnAmt, nonce, deadline));
+        digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator2, structHash));
+
+        (v, r, s) = vm.sign(signerKey, digest);
+        minter2.redeem(burnAmt, deadline, abi.encodePacked(r, s, v));
+        vm.stopPrank();
+
+        // Checks:
+        // User A's UNIT balance should decrease to 0.
+        assertEq(UNIT.balanceOf(userA), 0);
+        // User A should get exactly expectedGemAmt USDT
+        assertEq(usdt.balanceOf(userA), 900e6 + expectedGemAmt);
+        // Contract should have 0 USDT on its balance
+        assertEq(usdt.balanceOf(address(minter2)), 0);
     }
 }

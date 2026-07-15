@@ -25,10 +25,9 @@ contract Minter2 is AccessControl, EIP712, Nonces {
     using ECDSA for bytes32;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
-    bytes32 public constant CUSTODY_ROLE = keccak256("CUSTODY_ROLE");
 
     bytes32 public constant MINT_TYPEHASH =
-        keccak256("Mint(address account,address custody,uint256 assets,uint256 nonce,uint256 deadline)");
+        keccak256("Mint(address account,uint256 assets,uint256 nonce,uint256 deadline)");
     bytes32 public constant REDEEM_TYPEHASH =
         keccak256("Redeem(address account,uint256 assets,uint256 nonce,uint256 deadline)");
 
@@ -38,15 +37,11 @@ contract Minter2 is AccessControl, EIP712, Nonces {
     IPSM public immutable PSM;
     ICErc20 public immutable jUSDD;
 
-    mapping(address => uint256) public pendingRedeems;
-
-    event Minted(address indexed account, address indexed custody, uint256 assets);
-    event Burned(address indexed account, uint256 assets);
+    event Minted(address indexed account, uint256 assets);
     event Redeemed(address indexed account, uint256 assets);
 
     error ZeroAddress();
     error PermitExpired();
-    error InsufficientPendingRedeem();
     error OperationFailed();
 
     constructor(address admin_, IERC20 usdt_, Unit unit_, IERC20 usdd_, IPSM psm_, ICErc20 jUsdd_)
@@ -65,7 +60,6 @@ contract Minter2 is AccessControl, EIP712, Nonces {
         jUSDD = jUsdd_;
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
-        _grantRole(CUSTODY_ROLE, address(usdd_));
 
         USDT.forceApprove(address(this), type(uint256).max);
         USDT.forceApprove(psm_.gemJoin(), type(uint256).max);
@@ -73,37 +67,26 @@ contract Minter2 is AccessControl, EIP712, Nonces {
         USDD.forceApprove(address(psm_), type(uint256).max);
     }
 
-    function mint(uint256 assets, address custody_, uint256 deadline, bytes calldata signature) external {
-        _checkRole(CUSTODY_ROLE, custody_);
+    function mint(uint256 assets, uint256 deadline, bytes calldata signature) external {
         _checkPermit(
-            _hashTypedDataV4(
-                keccak256(abi.encode(MINT_TYPEHASH, msg.sender, custody_, assets, _useNonce(msg.sender), deadline))
-            ),
+            _hashTypedDataV4(keccak256(abi.encode(MINT_TYPEHASH, msg.sender, assets, _useNonce(msg.sender), deadline))),
             deadline,
             signature
         );
 
         USDT.safeTransferFrom(msg.sender, address(this), assets);
+
+        uint256 usddBefore = USDD.balanceOf(address(this));
         PSM.sellGem(address(this), assets);
+        uint256 usddReceived = USDD.balanceOf(address(this)) - usddBefore;
 
-        if (jUSDD.mint(assets * 1e12) != 0) revert OperationFailed();
-
-        UNIT.mint(msg.sender, assets);
-        emit Minted(msg.sender, custody_, assets);
-    }
-
-    function burn(uint256 assets) external {
-        pendingRedeems[msg.sender] += assets;
-        UNIT.burn(msg.sender, assets);
-        emit Burned(msg.sender, assets);
-
-        uint256 usddRequired = assets * 1e12 + (assets * PSM.tout()) / 1e6;
-        uint256 usddBalance = USDD.balanceOf(address(this));
-        if (usddRequired > usddBalance) {
-            if (jUSDD.redeemUnderlying(usddRequired - usddBalance) != 0) revert OperationFailed();
+        if (usddReceived > 0) {
+            if (jUSDD.mint(usddReceived) != 0) revert OperationFailed();
         }
 
-        PSM.buyGem(address(this), assets);
+        uint256 unitToMint = usddReceived / 1e12;
+        UNIT.mint(msg.sender, unitToMint);
+        emit Minted(msg.sender, unitToMint);
     }
 
     function redeem(uint256 assets, uint256 deadline, bytes calldata signature) external {
@@ -114,15 +97,26 @@ contract Minter2 is AccessControl, EIP712, Nonces {
             deadline,
             signature
         );
-        if (pendingRedeems[msg.sender] < assets) revert InsufficientPendingRedeem();
 
-        pendingRedeems[msg.sender] -= assets;
-        USDT.safeTransferFrom(address(this), msg.sender, assets);
-        emit Redeemed(msg.sender, assets);
+        UNIT.burn(msg.sender, assets);
+
+        uint256 tout = PSM.tout();
+        uint256 gemAmt = (assets * 1e18) / (1e18 + tout);
+
+        uint256 usddRequired = gemAmt * 1e12 + (gemAmt * tout) / 1e6;
+        uint256 usddBalance = USDD.balanceOf(address(this));
+        if (usddRequired > usddBalance) {
+            if (jUSDD.redeemUnderlying(usddRequired - usddBalance) != 0) revert OperationFailed();
+        }
+
+        PSM.buyGem(address(this), gemAmt);
+
+        USDT.safeTransferFrom(address(this), msg.sender, gemAmt);
+        emit Redeemed(msg.sender, gemAmt);
     }
 
     function withdraw(IERC20 token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        token.forceApprove(address(this), amount);
+        token.forceApprove(address(this), type(uint256).max);
         token.safeTransferFrom(address(this), to, amount);
     }
 
