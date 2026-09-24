@@ -190,9 +190,9 @@ contract ForkMainnetTest is Test {
         sUNIT.deposit(100e6, userA);
         vm.stopPrank();
 
-        // Simulate deficit: confiscate 50 UNIT directly from sUNIT
-        vm.prank(admin);
-        UNIT.confiscate(address(sUNIT), admin, 50e6);
+        // Simulate deficit: sUNIT transfers 50 UNIT directly to admin
+        vm.prank(address(sUNIT));
+        UNIT.transfer(admin, 50e6);
 
         // Vault is now undercollateralized (50 assets vs 100 shares)
         assertEq(sUNIT.totalAssets(), 50e6);
@@ -245,10 +245,6 @@ contract ForkMainnetTest is Test {
         vm.startPrank(userA);
         vm.expectRevert();
         UNIT.mint(userA, 100e6);
-
-        // User A tries to confiscate
-        vm.expectRevert();
-        UNIT.confiscate(userA, userB, 100e6);
         vm.stopPrank();
     }
 
@@ -285,53 +281,27 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
     }
 
-    function testConfiscateMergedRole() public {
+    function testNoFreezingOrConfiscationInUnit() public {
         vm.prank(admin);
         UNIT.mint(userA, 100e6);
 
-        // Only DEFAULT_ADMIN_ROLE can confiscate
-        vm.prank(admin);
-        UNIT.confiscate(userA, admin, 100e6);
-
-        assertEq(UNIT.balanceOf(userA), 0);
-        assertEq(UNIT.balanceOf(admin), 100e6);
-    }
-
-    function testUnitFreezingAndConfiscation() public {
-        vm.prank(admin);
-        UNIT.mint(userA, 100e6);
-
-        // Admin freezes userA
-        vm.prank(admin);
-        UNIT.setFrozen(userA, true);
-        assertTrue(UNIT.isFrozen(userA));
-
-        // Frozen userA cannot transfer
-        vm.startPrank(userA);
-        vm.expectRevert(Unit.AccountFrozen.selector);
+        // User A can freely transfer tokens to User B without any freeze or whitelist restrictions
+        vm.prank(userA);
         UNIT.transfer(userB, 50e6);
-        vm.stopPrank();
+        assertEq(UNIT.balanceOf(userA), 50e6);
+        assertEq(UNIT.balanceOf(userB), 50e6);
 
-        // Frozen userA cannot deposit into sUNIT
+        // User A can deposit remaining tokens into sUNIT
         vm.startPrank(userA);
         UNIT.approve(address(sUNIT), 50e6);
-        vm.expectRevert(StakedUnit.AccountFrozen.selector);
         sUNIT.deposit(50e6, userA);
         vm.stopPrank();
 
-        // Admin can confiscate from frozen userA
-        vm.prank(admin);
-        UNIT.confiscate(userA, admin, 100e6);
+        assertEq(sUNIT.balanceOf(userA), 50e6);
         assertEq(UNIT.balanceOf(userA), 0);
-        assertEq(UNIT.balanceOf(admin), 100e6);
-
-        // Unfreeze
-        vm.prank(admin);
-        UNIT.setFrozen(userA, false);
-        assertFalse(UNIT.isFrozen(userA));
     }
 
-    function testStakedUnitConfiscation() public {
+    function testStakedUnitSovereignWithdrawal() public {
         vm.prank(admin);
         UNIT.mint(userA, 100e6);
 
@@ -342,17 +312,12 @@ contract ForkMainnetTest is Test {
 
         assertEq(sUNIT.balanceOf(userA), 100e6);
 
-        // Non-admin cannot confiscate sUNIT
-        vm.prank(userB);
-        vm.expectRevert(StakedUnit.Unauthorized.selector);
-        sUNIT.confiscate(userA, userB, 100e6);
-
-        // Admin confiscates sUNIT shares
-        vm.prank(admin);
-        sUNIT.confiscate(userA, admin, 100e6);
+        // Stakers can always redeem their shares back to UNIT freely
+        vm.prank(userA);
+        sUNIT.redeem(100e6, userA, userA);
 
         assertEq(sUNIT.balanceOf(userA), 0);
-        assertEq(UNIT.balanceOf(admin), 100e6);
+        assertEq(UNIT.balanceOf(userA), 100e6);
         assertEq(sUNIT.totalAssets(), 0);
         assertEq(sUNIT.totalSupply(), 0);
     }
