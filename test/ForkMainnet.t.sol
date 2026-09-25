@@ -11,8 +11,11 @@ import {MockUSDD} from "./MockUSDD.sol";
 import {MockPSM} from "./MockPSM.sol";
 import {MockjUSDD} from "./MockjUSDD.sol";
 import {CumulativeMerkleDrop} from "../src/CumulativeMerkleDrop.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract ForkMainnetTest is Test {
+    event RewardsDistributed(address indexed distributor, uint256 claimedUSDD, uint256 mintedUNIT);
     // Real mainnet addresses
     address constant USDT_ADDR = 0xa614f803B6FD780986A42c78Ec9c7f77e6DeD13C;
     address constant USDD_ADDR = 0xE91A7411e56Ce79E83570570f49B9FC35B7727c5;
@@ -673,6 +676,8 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         // Keeper executes atomic claim and distribute
+        vm.expectEmit(true, false, false, true, address(minter2));
+        emit RewardsDistributed(address(distributor), 100e18, 100e6);
         vm.prank(admin);
         minter2.claimAndDistributeRewards(claims, address(distributor));
 
@@ -770,6 +775,95 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         assertEq(UNIT.balanceOf(userA), 1e6);
+    }
+
+    function testMinter2PauseUnpause() public {
+        bytes32 adminRole = minter2.DEFAULT_ADMIN_ROLE();
+
+        usdt.mint(userA, 100e6);
+        vm.startPrank(userA);
+        usdt.approve(address(minter2), 100e6);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = minter2.nonces(userA);
+        bytes32 structHash = keccak256(abi.encode(minter2.MINT_TYPEHASH(), userA, 100e6, false, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        vm.stopPrank();
+
+        // Non-admin cannot pause
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, userA, adminRole
+            )
+        );
+        vm.prank(userA);
+        minter2.pause();
+
+        // Admin pauses
+        vm.prank(admin);
+        minter2.pause();
+        assertTrue(minter2.paused());
+
+        // Mint reverts when paused
+        vm.prank(userA);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        minter2.mint(100e6, false, 0, deadline, abi.encodePacked(r, s, v));
+
+        // Redeem also reverts when paused
+        vm.prank(userA);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        minter2.redeem(100e6, false, 0, deadline, abi.encodePacked(r, s, v));
+
+        // Non-admin cannot unpause
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, userA, adminRole
+            )
+        );
+        vm.prank(userA);
+        minter2.unpause();
+
+        // Admin unpauses
+        vm.prank(admin);
+        minter2.unpause();
+        assertFalse(minter2.paused());
+
+        // Mint succeeds after unpause
+        vm.prank(userA);
+        minter2.mint(100e6, false, 0, deadline, abi.encodePacked(r, s, v));
+        assertEq(UNIT.balanceOf(userA), 100e6);
+    }
+
+    function testCannotRenounceAdminRole() public {
+        bytes32 adminRole = UNIT.DEFAULT_ADMIN_ROLE();
+        bytes32 minterRole = UNIT.MINTER_ROLE();
+
+        // UNIT admin renouncement reverts
+        vm.expectRevert(Unit.CannotRenounceAdmin.selector);
+        vm.prank(admin);
+        UNIT.renounceRole(adminRole, admin);
+
+        // Minter2 admin renouncement reverts
+        vm.expectRevert(Minter2.CannotRenounceAdmin.selector);
+        vm.prank(admin);
+        minter2.renounceRole(adminRole, admin);
+
+        // Non-admin roles CAN be renounced
+        vm.prank(admin);
+        UNIT.renounceRole(minterRole, admin);
+        assertFalse(UNIT.hasRole(minterRole, admin));
+    }
+
+    function testCumulativeMerkleDropZeroRootReverts() public {
+        vm.prank(admin);
+        vm.expectRevert(CumulativeMerkleDrop.ZeroRoot.selector);
+        distributor.setMerkleRoot(bytes32(0));
+
+        bytes32 validRoot = keccak256("validRoot");
+        vm.prank(admin);
+        distributor.setMerkleRoot(validRoot);
+        assertEq(distributor.merkleRoot(), validRoot);
     }
 }
 

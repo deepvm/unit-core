@@ -8,6 +8,7 @@ contract Unit is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     error ZeroAddress();
+    error CannotRenounceAdmin();
 
     constructor(address admin_) ERC20("Unit USD", "unitUSD") {
         if (admin_ == address(0)) revert ZeroAddress();
@@ -29,5 +30,10 @@ contract Unit is ERC20, AccessControl {
     function burnFrom(address from, uint256 assets) external {
         _spendAllowance(from, msg.sender, assets);
         _burn(from, assets);
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation) public override {
+        if (role == DEFAULT_ADMIN_ROLE) revert CannotRenounceAdmin();
+        super.renounceRole(role, callerConfirmation);
     }
 }

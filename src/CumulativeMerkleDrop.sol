@@ -17,6 +17,7 @@ contract CumulativeMerkleDrop is Ownable2Step {
     event Claimed(address indexed account, uint256 amount);
 
     error CannotRenounceOwnership();
+    error ZeroRoot();
 
     constructor(IERC20 token_, bytes32 merkleRoot_) Ownable(msg.sender) {
         token = token_;
@@ -28,6 +29,7 @@ contract CumulativeMerkleDrop is Ownable2Step {
     }
 
     function setMerkleRoot(bytes32 newRoot) external onlyOwner {
+        if (newRoot == bytes32(0)) revert ZeroRoot();
         merkleRoot = newRoot;
         emit MerkleRootUpdated(newRoot);
     }
