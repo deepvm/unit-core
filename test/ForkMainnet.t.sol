@@ -107,23 +107,23 @@ contract ForkMainnetTest is Test {
         vm.stopPrank();
 
         assertEq(sUNIT.balanceOf(userA), 100e6); // 6 decimals (same as unitUSD)
-        assertEq(sUNIT.totalAssets(), 100e6);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 100e6);
 
-        // Warp 365 days - totalAssets remains 100e6 (no yield)
+        // Warp 365 days - balance remains 100e6 (no yield)
         vm.warp(block.timestamp + 365 days);
-        assertEq(sUNIT.totalAssets(), 100e6);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 100e6);
 
-        // Sole holder redeems all shares
+        // Sole holder withdraws all shares
         vm.startPrank(userA);
-        sUNIT.redeem(sUNIT.balanceOf(userA), userA, userA);
+        sUNIT.withdraw(sUNIT.balanceOf(userA), userA, userA);
         vm.stopPrank();
 
         assertEq(UNIT.balanceOf(userA), 100e6);
-        assertEq(sUNIT.totalAssets(), 0);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 0);
         assertEq(sUNIT.totalSupply(), 0);
     }
 
-    function testVaultNonTransferable() public {
+    function testWrapperTransferable() public {
         vm.prank(admin);
         UNIT.mint(userA, 100e6);
 
@@ -135,17 +135,19 @@ contract ForkMainnetTest is Test {
         bool success = sUNIT.transfer(userB, 0);
         assertTrue(success);
 
-        // Direct transfer must revert with NonTransferable
-        vm.expectRevert(StakedUnit.NonTransferable.selector);
+        // Direct transfer works as standard ERC20
         sUNIT.transfer(userB, 10e6);
+        assertEq(sUNIT.balanceOf(userB), 10e6);
+        assertEq(sUNIT.balanceOf(userA), 90e6);
 
-        // transferFrom must also revert with NonTransferable
+        // transferFrom also works
         sUNIT.approve(userB, 10e6);
         vm.stopPrank();
 
         vm.prank(userB);
-        vm.expectRevert(StakedUnit.NonTransferable.selector);
         sUNIT.transferFrom(userA, userB, 10e6);
+        assertEq(sUNIT.balanceOf(userB), 20e6);
+        assertEq(sUNIT.balanceOf(userA), 80e6);
     }
 
     function testVaultMultipleHolders() public {
@@ -166,22 +168,22 @@ contract ForkMainnetTest is Test {
 
         assertEq(sUNIT.balanceOf(userA), 100e6);
         assertEq(sUNIT.balanceOf(userB), 200e6);
-        assertEq(sUNIT.totalAssets(), 300e6);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 300e6);
 
         vm.startPrank(userA);
-        sUNIT.redeem(100e6, userA, userA);
+        sUNIT.withdraw(100e6, userA, userA);
         vm.stopPrank();
 
         vm.startPrank(userB);
-        sUNIT.redeem(200e6, userB, userB);
+        sUNIT.withdraw(200e6, userB, userB);
         vm.stopPrank();
 
         assertEq(UNIT.balanceOf(userA), 100e6);
         assertEq(UNIT.balanceOf(userB), 200e6);
-        assertEq(sUNIT.totalAssets(), 0);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 0);
     }
 
-    function testVaultSolvencyProtection() public {
+    function testWrapper1to1BackingAndUnwrap() public {
         vm.prank(admin);
         UNIT.mint(userA, 100e6);
 
@@ -190,41 +192,18 @@ contract ForkMainnetTest is Test {
         sUNIT.deposit(100e6, userA);
         vm.stopPrank();
 
-        // Simulate deficit: sUNIT transfers 50 UNIT directly to admin
-        vm.prank(address(sUNIT));
-        UNIT.transfer(admin, 50e6);
-
-        // Vault is now undercollateralized (50 assets vs 100 shares)
-        assertEq(sUNIT.totalAssets(), 50e6);
+        assertEq(sUNIT.balanceOf(userA), 100e6);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 100e6);
         assertEq(sUNIT.totalSupply(), 100e6);
 
-        // max limits must report 0
-        assertEq(sUNIT.maxDeposit(userA), 0);
-        assertEq(sUNIT.maxMint(userA), 0);
-        assertEq(sUNIT.maxWithdraw(userA), 0);
-        assertEq(sUNIT.maxRedeem(userA), 0);
+        // User unwraps via wrapped withdraw
+        vm.prank(userA);
+        sUNIT.withdraw(100e6, userA, userA);
 
-        // Operations revert with max limit exceeded / VaultInsolvent
-        vm.startPrank(userA);
-        vm.expectRevert();
-        sUNIT.deposit(10e6, userA);
-
-        vm.expectRevert();
-        sUNIT.redeem(50e6, userA, userA);
-        vm.stopPrank();
-
-        // Recapitalize vault
-        vm.prank(admin);
-        UNIT.mint(address(sUNIT), 50e6);
-
-        // Solvency restored
-        assertEq(sUNIT.totalAssets(), 100e6);
-        assertTrue(sUNIT.maxRedeem(userA) > 0);
-
-        vm.startPrank(userA);
-        sUNIT.redeem(100e6, userA, userA);
-        vm.stopPrank();
+        assertEq(sUNIT.balanceOf(userA), 0);
         assertEq(UNIT.balanceOf(userA), 100e6);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 0);
+        assertEq(sUNIT.totalSupply(), 0);
     }
 
     function testVaultZeroDepositReverts() public {
@@ -312,13 +291,13 @@ contract ForkMainnetTest is Test {
 
         assertEq(sUNIT.balanceOf(userA), 100e6);
 
-        // Stakers can always redeem their shares back to UNIT freely
+        // Stakers can always withdraw their shares back to UNIT freely
         vm.prank(userA);
-        sUNIT.redeem(100e6, userA, userA);
+        sUNIT.withdraw(100e6, userA, userA);
 
         assertEq(sUNIT.balanceOf(userA), 0);
         assertEq(UNIT.balanceOf(userA), 100e6);
-        assertEq(sUNIT.totalAssets(), 0);
+        assertEq(UNIT.balanceOf(address(sUNIT)), 0);
         assertEq(sUNIT.totalSupply(), 0);
     }
 
@@ -710,7 +689,8 @@ contract ForkMainnetTest is Test {
 
         usdd.mint(address(minter2), 10e18);
         vm.prank(admin);
-        bytes memory ret = minter2.executeCall(address(usdd), 0, abi.encodeWithSignature("transfer(address,uint256)", userA, 10e18));
+        bytes memory ret =
+            minter2.executeCall(address(usdd), 0, abi.encodeWithSignature("transfer(address,uint256)", userA, 10e18));
         bool success = abi.decode(ret, (bool));
         assertTrue(success);
 
